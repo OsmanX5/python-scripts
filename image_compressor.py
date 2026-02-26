@@ -105,6 +105,12 @@ class ImageCompressorApp:
         )
         quality_spin.grid(row=1, column=1, sticky=tk.W, padx=(4, 0), pady=(6, 0))
 
+        # Replace originals checkbox
+        self.replace_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            opts, text="Replace original files", variable=self.replace_var
+        ).grid(row=1, column=3, columnspan=3, sticky=tk.W, pady=(6, 0))
+
         # Buttons
         btn_frame = tk.Frame(self.root, padx=8, pady=8)
         btn_frame.pack(fill=tk.X)
@@ -171,10 +177,20 @@ class ImageCompressorApp:
         scale = float(self.scale_var.get())
         to_jpg = self.format_var.get() == "jpg"
         quality = self.quality_var.get()
+        replace = self.replace_var.get()
 
-        # Create output sub-folder
-        out_dir = os.path.join(self.folder, "compressed")
-        os.makedirs(out_dir, exist_ok=True)
+        if replace:
+            confirm = messagebox.askyesno(
+                "Confirm Replace",
+                "This will overwrite the selected original images.\n"
+                "This action cannot be undone. Continue?",
+            )
+            if not confirm:
+                return
+            out_dir = self.folder
+        else:
+            out_dir = os.path.join(self.folder, "compressed")
+            os.makedirs(out_dir, exist_ok=True)
 
         success = 0
         errors = []
@@ -193,6 +209,9 @@ class ImageCompressorApp:
                         if resized.mode in ("RGBA", "P"):
                             resized = resized.convert("RGB")
                         resized.save(out_path, "JPEG", quality=quality)
+                        # Remove original if format changed and replacing in place
+                        if replace and out_path != path:
+                            os.remove(path)
                     else:
                         ext = os.path.splitext(path)[1].lower()
                         out_path = os.path.join(out_dir, base + ext)
@@ -207,12 +226,24 @@ class ImageCompressorApp:
             except Exception as e:
                 errors.append(f"{os.path.basename(path)}: {e}")
 
-        msg = f"Compressed {success}/{len(selected)} image(s).\nSaved to: {out_dir}"
+        if replace:
+            dest_label = "original location (replaced)"
+        else:
+            dest_label = out_dir
+        msg = f"Compressed {success}/{len(selected)} image(s).\nSaved to: {dest_label}"
         if errors:
             msg += "\n\nErrors:\n" + "\n".join(errors)
 
-        self.status_var.set(f"Done – {success} image(s) saved to /compressed")
+        status_text = (
+            f"Done – {success} image(s) replaced in place"
+            if replace
+            else f"Done – {success} image(s) saved to /compressed"
+        )
+        self.status_var.set(status_text)
         messagebox.showinfo("Done", msg)
+
+        if replace:
+            self._load_images()
 
 
 if __name__ == "__main__":
